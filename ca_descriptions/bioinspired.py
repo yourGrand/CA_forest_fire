@@ -1,4 +1,4 @@
-# Name: bioinspired
+# Name: Bioinspired
 # Dimensions: 2
 
 # --- Set up executable path, do not edit ---
@@ -14,21 +14,29 @@ sys.path.append(main_dir_loc + 'capyle/guicomponents')
 
 from capyle.ca import Grid2D, Neighbourhood, randomise2d
 import capyle.utils as utils
-
+import numpy as np
 
 def setup(args):
     """Set up the config object used to interact with the GUI"""
     config_path = args[0]
     config = utils.load(config_path)
     # -- THE CA MUST BE RELOADED IN THE GUI IF ANY OF THE BELOW ARE CHANGED --
-    config.title = "bioinspired"
+    config.title = "Bioinspired"
     config.dimensions = 2
     config.states = (0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
     # -------------------------------------------------------------------------
 
     # ---- Override the defaults below (these may be changed at anytime) ----
 
-    # config.state_colors = [(0,0,0),(1,1,1)]
+    config.state_colors = [(0,0,1),
+                           (0.5,0.5,0.5),
+                           (1,0,0),
+                           (0,0.5,0),
+                           (1,0.5,0),
+                           (0.5,1,0.5),
+                           (1,1,0),
+                           (0.25,0.5,0),
+                           (0,0,0)]
     # config.grid_dims = (200,200)
 
     # ----------------------------------------------------------------------
@@ -41,13 +49,94 @@ def setup(args):
         sys.exit()
     return config
 
-
 def transition_function(grid, neighbourstates, neighbourcounts):
-    """Function to apply the transition rules
-    and return the new grid"""
-    # YOUR CODE HERE
-    return grid
+    """
+    Transition function to simulate terrain types and burning states for a forest fire model.
+    """
 
+    # Unpack neighbor counts based on terrain and states
+    (lake_neighbours, town_neighbours, burning_forest_neighbours,
+     forest_neighbours, burn_chap_neighbours, chap_neighbours,
+     canyon_burn_neighbours, canyon_neighbours, burnt_neighbours) = neighbourcounts
+
+    # Copy the grid for modifications
+    new_grid = grid.copy()
+    
+    # Get grid dimensions
+    rows, cols = grid.shape
+
+    # Define transition probabilities
+    prob_canyon_burn = 0.25
+    prob_chaparral_burn = 0.05
+    prob_forest_burn = 0.005
+    prob_town_burn = 0.20
+    burn_out_chance_forest = 1 / 360
+    burn_out_chance_chaparral = 1 / 60
+    burn_out_chance_canyon = 1 / 5
+
+    # Iterate through each cell in the grid
+    for i in range(rows):
+        for j in range(cols):
+            current_state = grid[i, j]
+            
+            # Ensure we’re referencing a single neighbor cell state
+            north_burning = False
+            south_burning = False
+            if i > 0:  # Check if there's a cell to the north
+                north_burning = grid[i-1, j] in {2, 4, 6}
+            if i < rows - 1:  # Check if there's a cell to the south
+                south_burning = grid[i+1, j] in {2, 4, 6}
+            
+            # Adjust burning neighbor counts based on fire direction probabilities
+            burning_neighbors = (burning_forest_neighbours[i, j] +
+                                 burn_chap_neighbours[i, j] +
+                                 canyon_burn_neighbours[i, j])
+
+            if north_burning:
+                burning_neighbors += np.random.choice([1, 2], p=[0.5, 0.5])
+            if south_burning:
+                burning_neighbors += np.random.choice([0, 1], p=[0.5, 0.5])
+
+            # Apply transition rules based on current state and adjusted burning_neighbors
+
+            # Canyon + burning neighbors -> chance to turn Canyon Burning
+            if current_state == 7 and burning_neighbors > 0:
+                if np.random.rand() < burning_neighbors * prob_canyon_burn:
+                    new_grid[i, j] = 6
+
+            # Chaparral + burning neighbors -> chance to turn Chaparral Burning
+            elif current_state == 5 and burning_neighbors > 0:
+                if np.random.rand() < burning_neighbors * prob_chaparral_burn:
+                    new_grid[i, j] = 4
+
+            # Dense Forest + burning neighbors -> chance to turn Dense Forest Burning
+            elif current_state == 3 and burning_neighbors > 0:
+                if np.random.rand() < burning_neighbors * prob_forest_burn:
+                    new_grid[i, j] = 2
+
+            # Town + burning neighbors -> chance to turn Burnt Out
+            elif current_state == 1 and burning_neighbors > 0:
+                if np.random.rand() < burning_neighbors * prob_town_burn:
+                    new_grid[i, j] = 8
+
+            # Dense Forest Burning -> chance to turn Burnt Out
+            elif current_state == 2:
+                if np.random.rand() < burn_out_chance_forest:
+                    new_grid[i, j] = 8
+
+            # Chaparral Burning -> chance to turn Burnt Out
+            elif current_state == 4:
+                if np.random.rand() < burn_out_chance_chaparral:
+                    new_grid[i, j] = 8
+
+            # Canyon Burning -> chance to turn Burnt Out
+            elif current_state == 6:
+                if np.random.rand() < burn_out_chance_canyon:
+                    new_grid[i, j] = 8
+
+            # Burnt Out (state 8) and Lake (state 0) remain the same
+
+    return new_grid
 
 def main():
     """ Main function that sets up, runs and saves CA"""
