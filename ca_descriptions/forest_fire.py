@@ -31,6 +31,7 @@ COLORS = {
     'TOWN': (105/255, 105/255, 105/255)       # "#696969"
 }
 
+
 def setup(args):
     """Set up the config object used to interact with the GUI"""
     config_path = args[0]
@@ -78,6 +79,7 @@ def setup(args):
     if len(args) == 2:
         config.save()
         sys.exit()
+
     return config
 
 
