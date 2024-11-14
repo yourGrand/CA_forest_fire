@@ -46,7 +46,86 @@ INIT_FIRE = {
     "proposed_incinerator": False
 }
 
+def calculate_spread_rate(temp=20, wind_speed=5, humidity=50):
+    """
+    Calculate initial fire spread rate based on equation (1) from:
+
+    Jiang, W., Wang, F., Fang, L., Zheng, X., Qiao, X., Li, Z. and Meng, Q., 2021. 
+    Modelling of wildland-urban interface fire spread with the heterogeneous cellular automata model. 
+    Environmental Modelling & Software, 135, p.104895.
+    """
+    R0 = 0.03 * temp + 0.05 * wind_speed + 0.01 * (100 - humidity) - 0.3
+    
+    Kw = 1.0  # Wind coefficient
+    Ks = 1.0  # Fuel coefficient
+    Kf = 1.0  # Slope coefficient
+    
+    return R0 * Kw * Ks * Kf
+
+# def calculate_spread_rate(temp=20, wind_speed=5, humidity=50, wind_direction=0, spread_direction=0):
+#     """
+#     Calculate fire spread rate considering wind direction, based on equation (1) from Jiang et al.
+    
+#     Args:
+#         temp (float): Temperature in Celsius
+#         wind_speed (float): Wind speed in m/s
+#         humidity (float): Relative humidity percentage
+#         wind_direction (float): Wind direction in degrees (0-360, 0=North)
+#         spread_direction (float): Direction of potential fire spread in degrees
+        
+#     Returns:
+#         float: Adjusted spread rate
+#     """
+#     # Base spread rate from equation (1) in paper
+#     R0 = 0.03 * temp + 0.05 * wind_speed + 0.01 * (100 - humidity) - 0.3
+    
+#     # Calculate angle between wind and spread direction
+#     angle_diff = abs(wind_direction - spread_direction)
+#     if angle_diff > 180:
+#         angle_diff = 360 - angle_diff
+    
+#     # Wind coefficient (Kw) varies with angle difference
+#     # Maximum effect when wind aligns with spread direction
+#     # Minimum effect when wind opposes spread direction
+#     Kw = np.cos(np.radians(angle_diff))
+#     Kw = (Kw + 1) / 2  # Normalize to 0-1 range
+    
+#     # Apply coefficients (based on paper's equation)
+#     Ks = 1.0  # Fuel coefficient 
+#     Kf = 1.0  # Slope coefficient
+    
+#     return R0 * max(0.1, Kw) * Ks * Kf  # Ensure minimum spread rate
+
+SPREAD_RATE = calculate_spread_rate()
 TIME_STEP_IN_HOURS = 2
+
+
+class TerrainProperties:
+    def __init__(self, grid):
+        self.ignition_probs = {
+            "chaparral": 0.6,     # Catches fire easily
+            "dense_forest": 0.2,  # Harder to ignite
+            "canyon": 0.8         # Very easily ignited
+        }
+        
+        self.burn_duration = {
+            "chaparral": 72,      # Several days (72 hours)
+            "dense_forest": 720,  # Up to one month (30 days * 24 hours)
+            "canyon": 12          # Several hours
+        }
+        
+        # Init burning_time as a 3D array where each cell contains [current_time, max_duration]
+        self.burning_time = np.zeros((*GRID_SHAPE, 2))
+
+        self.prob_map = np.zeros(GRID_SHAPE)
+
+        # Set both burning_time and prob_map
+        for terrain_type, state_val in STATES.items():
+            terrain_mask = (grid == state_val)
+            
+            if terrain_type in self.burn_duration:
+                self.burning_time[terrain_mask, 1] = self.burn_duration[terrain_type]
+                self.prob_map[terrain_mask] = self.ignition_probs[terrain_type]
 
 
 def setup(args):
@@ -101,23 +180,6 @@ def setup(args):
     return config
 
 
-def calculate_spread_rate(temp=20, wind_speed=5, humidity=50):
-    """
-    Calculate initial fire spread rate based on equation (1) from:
-
-    Jiang, W., Wang, F., Fang, L., Zheng, X., Qiao, X., Li, Z. and Meng, Q., 2021. 
-    Modelling of wildland-urban interface fire spread with the heterogeneous cellular automata model. 
-    Environmental Modelling & Software, 135, p.104895.
-    """
-    R0 = 0.03 * temp + 0.05 * wind_speed + 0.01 * (100 - humidity) - 0.3
-    
-    Kw = 1.0  # Wind coefficient
-    Ks = 1.0  # Fuel coefficient
-    Kf = 1.0  # Slope coefficient
-    
-    return R0 * Kw * Ks * Kf
-
-
 def initate_fire(grid, terrain_props):
     if INIT_FIRE["powe_plant"]:
         grid[15, 5] = STATES["fire"]
@@ -130,28 +192,6 @@ def initate_fire(grid, terrain_props):
     return grid
 
 
-class TerrainProperties:
-    def __init__(self, grid):
-        self.ignition_probs = {
-            "chaparral": 0.6,     # Catches fire easily
-            "dense_forest": 0.2,  # Harder to ignite
-            "canyon": 0.8         # Very easily ignited
-        }
-        
-        self.burn_duration = {
-            "chaparral": 72,      # Several days (72 hours)
-            "dense_forest": 720,  # Up to one month (30 days * 24 hours)
-            "canyon": 12          # Several hours
-        }
-        
-        # Initialize burning_time as a 3D array where each cell contains [current_time, max_duration]
-        self.burning_time = np.zeros((*GRID_SHAPE, 2))
-
-        for terrain_type, state_val in STATES.items():
-            if terrain_type in self.burn_duration:
-                terrain_mask = (grid == state_val)
-                self.burning_time[terrain_mask, 1] = self.burn_duration[terrain_type]
-
 def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
     """
     Efficient transition function using numpy masks for forest fire simulation
@@ -162,8 +202,6 @@ def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
         neighbourcounts: Count of neighbors in each state
         terrain_props: TerrainProperties instance tracking burn times
     """
-    new_grid = grid.copy()
-    
     # Create masks for different states
     fire_mask = (grid == STATES["fire"])
     burnt_mask = (grid == STATES["burnt"])
@@ -171,66 +209,46 @@ def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
 
     # Init fire
     if not (fire_mask.any() or burnt_mask.any()):
-        return initate_fire(new_grid, terrain_props)
+        return initate_fire(grid, terrain_props)
 
-    spread_rate = calculate_spread_rate()
-    
     _, burning_neighbors, _, _, _, _, _ = neighbourcounts
-    # print(burning_neighbors[10:20, 0:10])
-    print()
-    print(neighbourcounts[STATES["fire"]][10:20, 0:10])
-    print(new_grid[10:20, 0:10])
     
     # Update burning times for cells that are currently on fire
     terrain_props.burning_time[fire_mask, 0] += TIME_STEP_IN_HOURS
     
     # Handle burnt out cells
     burnout_mask = fire_mask & (terrain_props.burning_time[..., 0] >= terrain_props.burning_time[..., 1])
-    new_grid[burnout_mask] = STATES["burnt"]
+    grid[burnout_mask] = STATES["burnt"]
 
     terrain_props.burning_time[burnout_mask, 0] = 0
     
     # Handle fire spread to neighboring cells
+    # Cells that can catch fire: not burning, not burnt, not fire resistant
+    can_ignite = (
+        ~fire_mask &
+        ~burnt_mask &
+        ~fire_resistant_mask &
+        (burning_neighbors > 0)
+    )
 
-    
-    # for terrain_type in ["chaparral", "dense_forest", "canyon"]:
-    #     # Create mask for current terrain type
-    #     terrain_mask = (grid == STATES[terrain_type])
-        
-    #     # Cells that can catch fire: correct terrain, not burning, not burnt, not fire resistant
-    #     can_ignite = (
-    #         terrain_mask &
-    #         ~fire_mask &
-    #         ~burnt_mask &
-    #         ~fire_resistant_mask &
-    #         (burning_neighbors > 0)
-    #     )
+    # Calculate ignition probability based on number of burning neighbors, base probability and spread rate
+    ignition_probs = (
+        terrain_props.prob_map[can_ignite] * 
+        burning_neighbors[can_ignite] / 8 * 
+        SPREAD_RATE
+    )
 
-    #     # print(can_ignite.shape)
-    #     # print((burning_neighbors == 1).any())
-    #     # print()
-        
-    #     # Calculate ignition probability based on number of burning neighbors and base probability
-    #     ignition_probs = (
-    #         terrain_props.ignition_probs[terrain_type] *
-    #         burning_neighbors[can_ignite] / 8 *  # Normalize by max possible neighbors
-    #         spread_rate
-    #     )
-        
-    #     # Generate random numbers for ignition check
-    #     random_vals = np.random.random(np.sum(can_ignite))
-        
-    #     # Create mask for cells that will ignite
-    #     will_ignite = np.zeros_like(can_ignite)
-    #     will_ignite[can_ignite] = random_vals < ignition_probs
-        
-    #     # Set new fires
-    #     new_grid[will_ignite] = STATES["fire"]
-        
-    #     # Reset burning time for newly ignited cells
-    #     terrain_props.burning_time[will_ignite, 0] = 0
-    
-    return new_grid
+    # Create mask for cells that will ignite
+    random_vals = np.random.random(np.sum(can_ignite))
+
+    will_ignite = np.zeros_like(can_ignite)
+    will_ignite[can_ignite] = random_vals < ignition_probs
+
+    # Set new fires
+    grid[will_ignite] = STATES["fire"]
+    terrain_props.burning_time[will_ignite, 0] = 0
+
+    return grid
 
 
 def main():
