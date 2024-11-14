@@ -42,61 +42,10 @@ STATES = {
 }
 
 INIT_FIRE = {
-    "powe_plant": True,
+    "power_plant": True,
     "proposed_incinerator": False
 }
 
-def calculate_spread_rate(temp=20, wind_speed=5, humidity=50):
-    """
-    Calculate initial fire spread rate based on equation (1) from:
-
-    Jiang, W., Wang, F., Fang, L., Zheng, X., Qiao, X., Li, Z. and Meng, Q., 2021. 
-    Modelling of wildland-urban interface fire spread with the heterogeneous cellular automata model. 
-    Environmental Modelling & Software, 135, p.104895.
-    """
-    R0 = 0.03 * temp + 0.05 * wind_speed + 0.01 * (100 - humidity) - 0.3
-    
-    Kw = 1.0  # Wind coefficient
-    Ks = 1.0  # Fuel coefficient
-    Kf = 1.0  # Slope coefficient
-    
-    return R0 * Kw * Ks * Kf
-
-# def calculate_spread_rate(temp=20, wind_speed=5, humidity=50, wind_direction=0, spread_direction=0):
-#     """
-#     Calculate fire spread rate considering wind direction, based on equation (1) from Jiang et al.
-    
-#     Args:
-#         temp (float): Temperature in Celsius
-#         wind_speed (float): Wind speed in m/s
-#         humidity (float): Relative humidity percentage
-#         wind_direction (float): Wind direction in degrees (0-360, 0=North)
-#         spread_direction (float): Direction of potential fire spread in degrees
-        
-#     Returns:
-#         float: Adjusted spread rate
-#     """
-#     # Base spread rate from equation (1) in paper
-#     R0 = 0.03 * temp + 0.05 * wind_speed + 0.01 * (100 - humidity) - 0.3
-    
-#     # Calculate angle between wind and spread direction
-#     angle_diff = abs(wind_direction - spread_direction)
-#     if angle_diff > 180:
-#         angle_diff = 360 - angle_diff
-    
-#     # Wind coefficient (Kw) varies with angle difference
-#     # Maximum effect when wind aligns with spread direction
-#     # Minimum effect when wind opposes spread direction
-#     Kw = np.cos(np.radians(angle_diff))
-#     Kw = (Kw + 1) / 2  # Normalize to 0-1 range
-    
-#     # Apply coefficients (based on paper's equation)
-#     Ks = 1.0  # Fuel coefficient 
-#     Kf = 1.0  # Slope coefficient
-    
-#     return R0 * max(0.1, Kw) * Ks * Kf  # Ensure minimum spread rate
-
-SPREAD_RATE = calculate_spread_rate()
 TIME_STEP_IN_HOURS = 2
 
 
@@ -181,15 +130,127 @@ def setup(args):
 
 
 def initate_fire(grid, terrain_props):
-    if INIT_FIRE["powe_plant"]:
-        grid[15, 5] = STATES["fire"]
-        terrain_props.burning_time[15, 5, 0] = 0
+    if INIT_FIRE["power_plant"]:
+        grid[49, 24] = STATES["fire"]
+        terrain_props.burning_time[49, 24, 0] = 0
     
     if INIT_FIRE["proposed_incinerator"]:
         grid[0, 49] = STATES["fire"]
         terrain_props.burning_time[0, 49, 0] = 0
         
     return grid
+
+
+def calculate_spread_rate(spread_direction, temp=20, wind_speed=5, humidity=50, wind_direction=0):
+    """
+    Vectorised calculation of fire spread rate considering wind direction.
+    
+    Args:
+        temp (float): Temperature in Celsius
+        wind_speed (float): Wind speed in m/s
+        humidity (float): Relative humidity percentage
+        wind_direction (float): Wind direction in degrees:
+            - 0° = Wind FROM East
+            - 90° = Wind FROM North
+            - 180° = Wind FROM West
+            - 270° = Wind FROM South
+        spread_direction (ndarray): Array of directions of potential fire spread in degrees
+            (same convention as wind_direction)
+        
+    Returns:
+        ndarray: Array of adjusted spread rates
+    """
+    print(f"\nSpread rate calculation:")
+    print(f"Wind direction: {wind_direction}°")
+    print(f"Sample spread directions: {spread_direction[:3]}")
+
+    # Base spread rate from equation (1) in paper
+    R0 = 0.03 * temp + 0.05 * wind_speed + 0.01 * (100 - humidity) - 0.3
+    
+    # Calculate angle between wind and spread direction
+    angle_diff = np.abs(wind_direction - spread_direction)
+    angle_diff = np.where(angle_diff > 180, 360 - angle_diff, angle_diff)
+    
+    # Wind coefficient (Kw) varies with angle difference
+    # Maximum effect when wind aligns with spread direction (angle_diff = 0)
+    # Minimum effect when wind opposes spread direction (angle_diff = 180)
+    Kw = np.cos(np.radians(angle_diff))
+    Kw = (Kw + 1) / 2
+
+    # Debug sample wind coefficients
+    print(f"Sample angle differences: {angle_diff[:3]}")
+    print(f"Sample wind coefficients: {Kw[:3]}")
+    
+    # Slope and Fuel coefficients' placeholder
+    Ks = 1.0
+    Kf = 1.0
+    
+    # return R0 * np.maximum(0.1, Kw) * Ks * Kf     # Maintain non-zero spread-rate (would makes sense from a physics perspective)
+    rates = R0 * Kw * Ks * Kf
+    print(f"Sample spread rates: {rates[:3]}")
+    
+    return rates
+
+
+def calculate_spread_direction(fire_mask, can_ignite):
+    """
+    Calculate spread directions from burning cells to ignitable cells.
+    Returns angles in degrees where:
+        - 0° = Spreading TO East
+        - 90° = Spreading TO North
+        - 180° = Spreading TO West
+        - 270° = Spreading TO South
+    """
+    ignitable_rows, ignitable_cols = np.where(can_ignite)
+    
+    # Get coordinates of burning cells
+    burning_rows, burning_cols = np.where(fire_mask)
+    
+    if len(burning_rows) == 0 or len(ignitable_rows) == 0:
+        return np.zeros(np.sum(can_ignite))
+    
+    # Create coordinate matrices
+    ign_rows = ignitable_rows.reshape(-1, 1)
+    ign_cols = ignitable_cols.reshape(-1, 1)
+    burn_rows = burning_rows.reshape(1, -1)
+    burn_cols = burning_cols.reshape(1, -1)
+    
+    # Calculate coordinate differences
+    # Note: Grid coordinates have y-axis pointing down, so we negate dy
+    dy = -(burn_rows - ign_rows)
+    dx = burn_cols - ign_cols
+    
+    # Calculate angles for all combinations
+    angles = np.degrees(np.arctan2(dy, dx))
+
+    # Convert to meteorological convention using numpy operations
+    # angles = np.mod(180 - angles, 360)
+    # angles = np.where(angles < 0, angles + 360, angles)
+    
+    # Find nearest burning cell for each ignitable cell
+    distances = np.sqrt(dy**2 + dx**2)
+    nearest_burning_idx = np.argmin(distances, axis=1)
+
+    # Debug prints
+    print("\nSample coordinate pairs (burning -> ignitable):")
+    for i in range(min(3, len(ignitable_rows))):
+        b_idx = nearest_burning_idx[i]
+        print(f"Burning cell ({burning_rows[b_idx]}, {burning_cols[b_idx]}) -> Ignitable cell ({ignitable_rows[i]}, {ignitable_cols[i]})")
+        print(f"dx={dx[i,b_idx]}, dy={dy[i,b_idx]}")
+        raw_angle = angles[i,b_idx]
+        print(f"Raw angle={raw_angle:.1f}°")
+    
+    # Return angles from nearest burning cells
+    # return angles[np.arange(len(ignitable_rows)), nearest_burning_idx]
+
+    final_angles = angles[np.arange(len(ignitable_rows)), nearest_burning_idx]
+    
+    # Debug prints
+    # Debug final angles
+    print("\nFinal angles (meteorological convention):")
+    print(f"Sample final angles: {final_angles[:3]}")
+
+    return final_angles
 
 
 def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
@@ -222,31 +283,35 @@ def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
 
     terrain_props.burning_time[burnout_mask, 0] = 0
     
-    # Handle fire spread to neighboring cells
-    # Cells that can catch fire: not burning, not burnt, not fire resistant
+    # Handle fire spread
     can_ignite = (
         ~fire_mask &
         ~burnt_mask &
         ~fire_resistant_mask &
         (burning_neighbors > 0)
     )
+    
+    if np.any(can_ignite):
+        spread_directions = calculate_spread_direction(fire_mask, can_ignite)
+        
+        spread_rate = calculate_spread_rate(
+            spread_direction=spread_directions
+        )
+        
+        ignition_probs = (
+            terrain_props.prob_map[can_ignite] * 
+            burning_neighbors[can_ignite] / 8 * 
+            spread_rate
+        )
 
-    # Calculate ignition probability based on number of burning neighbors, base probability and spread rate
-    ignition_probs = (
-        terrain_props.prob_map[can_ignite] * 
-        burning_neighbors[can_ignite] / 8 * 
-        SPREAD_RATE
-    )
+        # Create mask for cells that will ignite
+        random_vals = np.random.random(len(ignition_probs))
+        will_ignite = np.zeros_like(can_ignite)
+        will_ignite[can_ignite] = random_vals < ignition_probs
 
-    # Create mask for cells that will ignite
-    random_vals = np.random.random(np.sum(can_ignite))
-
-    will_ignite = np.zeros_like(can_ignite)
-    will_ignite[can_ignite] = random_vals < ignition_probs
-
-    # Set new fires
-    grid[will_ignite] = STATES["fire"]
-    terrain_props.burning_time[will_ignite, 0] = 0
+        # Set new fires
+        grid[will_ignite] = STATES["fire"]
+        terrain_props.burning_time[will_ignite, 0] = 0
 
     return grid
 
