@@ -63,5 +63,12 @@
         "town": [
             {"coords": [[34, 36], [24, 26]]}
         ]
+    },
+
+    "weather": {
+        "temperature": 20,
+        "wind_speed": 5,
+        "humidity": 50,
+        "wind_direction": 90
     }
 }

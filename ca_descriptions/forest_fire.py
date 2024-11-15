@@ -39,6 +39,7 @@ COLORS = {
 
 STATES = CONFIG['states']
 INIT_FIRE = CONFIG['initial_fire']
+WEATHER = CONFIG['weather']
 
 
 class TerrainProperties:
@@ -104,21 +105,21 @@ def initate_fire(grid, terrain_props):
     return grid
 
 
-def calculate_spread_rate(spread_direction, temp=20, wind_speed=5, humidity=50, wind_direction=90):
+def calculate_spread_rate(spread_direction, temp, wind_speed, humidity, wind_direction):
     """
     Vectorised calculation of fire spread rate considering wind direction.
     
     Args:
-        temp (float): Temperature in Celsius
-        wind_speed (float): Wind speed in m/s
-        humidity (float): Relative humidity percentage
-        wind_direction (float): Wind direction in degrees:
+        spread_direction (ndarray): Array of directions of potential fire spread in degrees
             - 0° = Wind FROM East
             - 90° = Wind FROM North
             - 180° = Wind FROM West
             - 270° = Wind FROM South
-        spread_direction (ndarray): Array of directions of potential fire spread in degrees
-            (same convention as wind_direction)
+        temp (float): Temperature in Celsius
+        wind_speed (float): Wind speed in m/s
+        humidity (float): Relative humidity percentage
+        wind_direction (float): Wind direction in degrees:
+            (same convention as spread_direction)
         
     Returns:
         ndarray: Array of adjusted spread rates
@@ -247,7 +248,11 @@ def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
         spread_directions = calculate_spread_direction(fire_mask, can_ignite)
         
         spread_rate = calculate_spread_rate(
-            spread_direction=spread_directions
+            spread_directions,
+            WEATHER['temperature'],
+            WEATHER['wind_speed'],
+            WEATHER['humidity'],
+            WEATHER['wind_direction']
         )
         
         ignition_probs = (
