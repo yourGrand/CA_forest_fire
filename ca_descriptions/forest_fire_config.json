@@ -1,0 +1,67 @@
+{
+    "simulation": {
+        "name": "CA-based forest fire model",
+        "grid_shape": [50, 50],
+        "time_step_hours": 2
+    },
+
+    "colors": {
+        "burnt": [0, 0, 0],
+        "fire": [255, 0, 0],
+        "chaparral": [190, 190, 61],
+        "dense_forest": [84, 97, 48],
+        "lake": [77, 170, 243],
+        "canyon": [253, 254, 84],
+        "town": [105, 105, 105]
+    },
+
+    "states": {
+        "burnt": 0,
+        "fire": 1,
+        "chaparral": 2,
+        "dense_forest": 3,
+        "lake": 4,
+        "canyon": 5,
+        "town": 6
+    },
+
+    "initial_fire": {
+        "power_plant": true,
+        "proposed_incinerator": false
+    },
+
+    "terrain_properties": {
+        "ignition_probabilities": {
+            "chaparral": 0.6,
+            "dense_forest": 0.2,
+            "canyon": 0.8
+        },
+
+        "burn_duration_hours": {
+            "chaparral": 72,
+            "dense_forest": 720,
+            "canyon": 12
+        }
+    },
+
+    "initial_terrain": {
+        "dense_forest": [
+            {"coords": [[8, 11], [0, 10]]},
+            {"coords": [[8, 40], [10, 20]]},
+            {"coords": [[15, 20], [30, 42]]}
+        ],
+
+        "lake": [
+            {"coords": [[40, 42], [15, 30]]},
+            {"coords": [[27, 40], [43, 45]]}
+        ],
+
+        "canyon": [
+            {"coords": [[23, 25], [26, 42]]}
+        ],
+        
+        "town": [
+            {"coords": [[34, 36], [24, 26]]}
+        ]
+    }
+}

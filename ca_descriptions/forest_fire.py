@@ -1,6 +1,6 @@
 # file: forest_fire.py
 
-# Name: CA-based Forest fire model
+# Name: CA-based forest fire model
 # Dimensions: 2
 
 # --- Set up executable path, do not edit ---
@@ -14,58 +14,41 @@ sys.path.append(main_dir_loc + "capyle/ca")
 sys.path.append(main_dir_loc + "capyle/guicomponents")
 # ---
 
+import os
+import json
 from capyle.ca import Grid2D, Neighbourhood, randomise2d
 import capyle.utils as utils
 import numpy as np
 
-NAME = "CA-based forest fire model"
-GRID_SHAPE = (50, 50)
+# Load configuration using absolute path
+script_dir = os.path.dirname(os.path.abspath(this_file_loc))
+config_path = os.path.join(script_dir, 'forest_fire_config.json')
+with open(config_path, 'r') as f:
+    CONFIG = json.load(f)
 
+# Extract configuration values
+NAME = CONFIG['simulation']['name']
+GRID_SHAPE = tuple(CONFIG['simulation']['grid_shape'])
+TIME_STEP_IN_HOURS = CONFIG['simulation']['time_step_hours']
+
+# Convert colors from [0-255] to [0-1] range
 COLORS = {
-    "burnt": (0/255, 0/255, 0/255),           # "#000000"
-    "fire": (255/255, 0/255, 0/255),          # "#FF0000"
-    "chaparral": (190/255, 190/255, 61/255),  # "#BEBE3D"
-    "dense_forest": (84/255, 97/255, 48/255), # "#546130"
-    "lake": (77/255, 170/255, 243/255),       # "#4DAAF3"
-    "canyon": (253/255, 254/255, 84/255),     # "#FDFE54"
-    "town": (105/255, 105/255, 105/255)       # "#696969"
+    name: tuple(val/255 for val in rgb)
+    for name, rgb in CONFIG['colors'].items()
 }
 
-STATES = {
-    "burnt": 0,
-    "fire": 1,
-    "chaparral": 2,
-    "dense_forest": 3,
-    "lake": 4,
-    "canyon": 5,
-    "town": 6
-}
-
-INIT_FIRE = {
-    "power_plant": True,
-    "proposed_incinerator": False
-}
-
-TIME_STEP_IN_HOURS = 2
+STATES = CONFIG['states']
+INIT_FIRE = CONFIG['initial_fire']
 
 
 class TerrainProperties:
     def __init__(self, grid):
-        self.ignition_probs = {
-            "chaparral": 0.6,     # Catches fire easily
-            "dense_forest": 0.2,  # Harder to ignite
-            "canyon": 0.8         # Very easily ignited
-        }
-        
-        self.burn_duration = {
-            "chaparral": 72,      # Several days (72 hours)
-            "dense_forest": 720,  # Up to one month (30 days * 24 hours)
-            "canyon": 12          # Several hours
-        }
+        config = CONFIG['terrain_properties']
+        self.ignition_probs = config['ignition_probabilities']
+        self.burn_duration = config['burn_duration_hours']
         
         # Init burning_time as a 3D array where each cell contains [current_time, max_duration]
         self.burning_time = np.zeros((*GRID_SHAPE, 2))
-
         self.prob_map = np.zeros(GRID_SHAPE)
 
         # Set both burning_time and prob_map
@@ -81,47 +64,27 @@ def setup(args):
     """Set up the config object used to interact with the GUI"""
     config_path = args[0]
     config = utils.load(config_path)
+
     # -- THE CA MUST BE RELOADED IN THE GUI IF ANY OF THE BELOW ARE CHANGED --
     config.title = NAME
     config.dimensions = 2
-
     config.states = tuple(STATES.values())
-
-    # -------------------------------------------------------------------------
-
-    # ---- Override the defaults below (these may be changed at anytime) ----
-
-    # config.state_colors = [(0,0,0),(1,1,1)]
-    # config.grid_dims = (200,200)
-
-    # ----------------------------------------------------------------------
-    
     config.state_colors = [color for color in COLORS.values()]
     config.grid_dims = GRID_SHAPE
     config.wrap = False
 
-    # Chaparral
+    # Initialise grid with chaparral
     config.initial_grid = np.zeros(GRID_SHAPE)
     config.initial_grid.fill(STATES["chaparral"])
 
-    # Dense forest
-    config.initial_grid[8:11, 0:10] = STATES["dense_forest"]
-    config.initial_grid[8:40, 10:20] = STATES["dense_forest"]
-    config.initial_grid[15:20, 30:42] = STATES["dense_forest"]
-
-    # Lake
-    config.initial_grid[40:42, 15:30] = STATES["lake"]
-    config.initial_grid[27:40, 43:45] = STATES["lake"]
-
-    # Canyon
-    config.initial_grid[23:25, 26:42] = STATES["canyon"]
-
-    # Town
-    config.initial_grid[34:36, 24:26] = STATES["town"]
+    # Set up terrain based on configuration
+    for terrain_type, regions in CONFIG['initial_terrain'].items():
+        for region in regions:
+            coords = region['coords']
+            x_range = slice(coords[0][0], coords[0][1])
+            y_range = slice(coords[1][0], coords[1][1])
+            config.initial_grid[x_range, y_range] = STATES[terrain_type]
     
-    # the GUI calls this to pass the user defined config
-    # into the main system with an extra argument
-    # do not change
     if len(args) == 2:
         config.save()
         sys.exit()
