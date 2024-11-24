@@ -226,7 +226,7 @@ def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
     if not (fire_mask.any() or burnt_mask.any()):
         return initate_fire(grid, terrain_props)
 
-    _, burning_neighbors, _, _, _, _, _ = neighbourcounts
+    _, burning_neighbors, _, _, _, _, _, _, _, _ = neighbourcounts
     
     # Update burning times for cells that are currently on fire
     terrain_props.burning_time[fire_mask, 0] += TIME_STEP_IN_HOURS

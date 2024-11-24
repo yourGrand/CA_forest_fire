@@ -12,7 +12,10 @@
         "dense_forest": [84, 97, 48],
         "lake": [77, 170, 243],
         "canyon": [253, 254, 84],
-        "town": [105, 105, 105]
+        "town": [105, 105, 105],
+        "protected_chaparral": [185, 185, 56],
+        "protected_dense_forest": [79, 92, 43],
+        "protected_canyon": [248, 249, 79]
     },
 
     "states": {
@@ -22,7 +25,10 @@
         "dense_forest": 3,
         "lake": 4,
         "canyon": 5,
-        "town": 6
+        "town": 6,
+        "protected_chaparral": 7,
+        "protected_dense_forest": 8,
+        "protected_canyon": 9
     },
 
     "initial_fire": {
@@ -34,13 +40,19 @@
         "ignition_probabilities": {
             "chaparral": 0.6,
             "dense_forest": 0.2,
-            "canyon": 0.8
+            "canyon": 0.8,
+            "protected_chaparral": 0.3,
+            "protected_dense_forest": 0.1,
+            "protected_canyon": 0.4
         },
 
         "burn_duration_hours": {
             "chaparral": 72,
             "dense_forest": 720,
-            "canyon": 12
+            "canyon": 12,
+            "protected_chaparral": 72,
+            "protected_dense_forest": 720,
+            "protected_canyon": 12
         }
     },
 
@@ -62,6 +74,18 @@
         
         "town": [
             {"coords": [[34, 36], [24, 26]]}
+        ],
+
+        "protected_chaparral": [
+            {"coords": [[0, 0], [0, 0]]}
+        ],
+
+        "protected_dense_forest": [
+            {"coords": [[0, 0], [0, 0]]}
+        ],
+
+        "protected_canyon": [
+            {"coords": [[0, 0], [0, 0]]}
         ]
     },
 
