@@ -110,7 +110,7 @@ def calculate_spread_rate(spread_direction, temp, wind_speed, humidity, wind_dir
     Vectorised calculation of fire spread rate considering wind direction.
     
     Args:
-        spread_direction (ndarray): Array of directions of potential fire spread in degrees
+        wind_direction (float): Wind direction in degrees:
             - 0° = Wind FROM East
             - 90° = Wind FROM North
             - 180° = Wind FROM West
@@ -118,8 +118,11 @@ def calculate_spread_rate(spread_direction, temp, wind_speed, humidity, wind_dir
         temp (float): Temperature in Celsius
         wind_speed (float): Wind speed in m/s
         humidity (float): Relative humidity percentage
-        wind_direction (float): Wind direction in degrees:
-            (same convention as spread_direction)
+        spread_direction (ndarray): Array of directions of potential fire spread in degrees
+            - 0° = Spreading TO East
+            - 90° = Spreading TO North
+            - 180° = Spreading TO West
+            - 270° = Spreading TO South
         
     Returns:
         ndarray: Array of adjusted spread rates
@@ -160,10 +163,10 @@ def calculate_spread_direction(fire_mask, can_ignite):
     """
     Calculate spread directions from burning cells to ignitable cells.
     Returns angles in degrees where:
-        - 0° = Spreading FROM East
-        - 90° = Spreading FROM North
-        - 180° = Spreading FROM West
-        - 270° = Spreading FROM South
+        - 0° = Spreading TO East
+        - 90° = Spreading TO North
+        - 180° = Spreading TO West
+        - 270° = Spreading TO South
     """
     ignitable_rows, ignitable_cols = np.where(can_ignite)
     burning_rows, burning_cols = np.where(fire_mask)
@@ -257,7 +260,7 @@ def transition_function(grid, neighbourstates, neighbourcounts, terrain_props):
         
         ignition_probs = (
             terrain_props.prob_map[can_ignite] * 
-            burning_neighbors[can_ignite] / 8 * 
+            burning_neighbors[can_ignite] / 8 *
             spread_rate
         )
 
